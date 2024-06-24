@@ -286,7 +286,7 @@ struct ZDCqvectors{
   inline void fillRegistry(int step, double qxa, double qya, double qxc, double qyc, double vx, double vy, double vz,  double centrality, double trackmultiplicity, int runnumber, double polarity)
   {
     //    LOGF(info, "centrality = %.2f", centrality);
-    
+    //TODO: dit kan korter door vector van histos te maken, kan dan ook in loopje worden gevuld.
     if(step==0){
       registry.get<TProfile>(HIST("before/hQXA_QXC_vs_cent"))->Fill(centrality,qxa*qxc);
       registry.get<TProfile>(HIST("before/hQYA_QYC_vs_cent"))->Fill(centrality,qya*qyc);
