@@ -21,6 +21,8 @@
 #include "Common/CCDB/EventSelectionParams.h"
 #include "Common/CCDB/TriggerAliases.h"
 #include "CCDB/BasicCCDBManager.h"
+#include <DataFormatsParameters/GRPObject.h>
+#include <DataFormatsParameters/GRPMagField.h>
 #include "Common/DataModel/Centrality.h"
 #include "Common/DataModel/Multiplicity.h"
 #include "ReconstructionDataFormats/GlobalTrackID.h"
@@ -86,7 +88,14 @@ int counter =0;
 //here for each step open histos (if possible) and set bool for each step to true. Then in process check bool and proceed or start collecting q-vectors
 
 //step0
-std::vector<TProfile2D*> hZN_mean(10, nullptr);
+std::shared_ptr<TProfile2D> ZN_Energy[10] = {{nullptr}}; // fill for weights
+std::shared_ptr<TH2> hQx_vs_Qy[6] = {{nullptr}}; // fill Qx vs Qy for each step in the recentring process.
+
+// <XX> <XY> <YX> and <YY> for step 0 and step 5
+std::shared_ptr<TProfile> COORD_correlations[2][4] = {{nullptr}};
+
+
+std::vector<TProfile2D*> hZN_mean(10, nullptr); //Get from calibration file
 //step1
 std::vector<TProfile2D*> mean_1perCent_Run(4, nullptr);// hQXA, hQYA, hQXC, hQYC
 //step2
@@ -102,6 +111,16 @@ std::vector<TProfile2D*> hmeanN_1perCent_Run(1, nullptr);
 std::vector<THnSparseD*> mean_Magnet_10perCent_v(4, nullptr);
 //step5
 std::vector<THnSparseD*> mean_run_cent10_Mult(4, nullptr);
+
+std::vector<const char*> sides  = {"A", "C"};
+std::vector<const char*> coords = {"x", "y", "z"};
+std::vector<const char*> COORDS = {"X", "Y"};
+
+//https://alice-notes.web.cern.ch/system/files/notes/analysis/620/017-May-31-analysis_note-ALICE_analysis_note_v2.pdf
+double ZDC_px[4] = {-1.75, 1.75,-1.75, 1.75};
+double ZDC_py[4] = {-1.75, -1.75,1.75, 1.75};
+double alphaZDC = 0.395;
+//tot hier van die analysis note
 
 }
 
@@ -131,8 +150,8 @@ struct ZDCqvectors{
   O2_DEFINE_CONFIGURABLE(cfgUseNch,           bool,       false, "Use Nch for flow observables")
   O2_DEFINE_CONFIGURABLE(cfgNbootstrap,       int,        10, "Number of subsamples")
   O2_DEFINE_CONFIGURABLE(cfgMagField,         float,      99999, "Configurable magnetic field; default CCDB will be queried")
-  O2_DEFINE_CONFIGURABLE(cfgQvecrecent,      std::string, "AnalysisResults_outCalib.root", "path+file from recentring")
-  O2_DEFINE_CONFIGURABLE(cfgCalibenergy,      std::string, "../runCalib/AnalysisResults.root", "path+file from energy calibration")
+  O2_DEFINE_CONFIGURABLE(cfgQvecrecent,       std::string, "AnalysisResults_outCalib.root", "path+file from recentring")
+  O2_DEFINE_CONFIGURABLE(cfgCalibenergy,      std::string, "AnalysisResults.root", "path+file from energy calibration")
   O2_DEFINE_CONFIGURABLE(cfgOutFitStep3,      std::string, "outFitStep3.root", "path+file from energy calibration")
   
   double centrality;
@@ -149,153 +168,153 @@ struct ZDCqvectors{
   Filter collisionFilter = nabs(aod::collision::posZ) < cfgCutVertex;
   Filter trackFilter = (nabs(aod::track::eta) < cfgCutEta) && (aod::track::pt > cfgCutPtMin) && (aod::track::pt < cfgCutPtMax) && ((requireGlobalTrackInFilter()) || (aod::track::isGlobalTrackSDD == (uint8_t) true)) && (aod::track::tpcChi2NCl < cfgCutChi2prTPCcls);
   
+  Service<ccdb::BasicCCDBManager> ccdb;
   
   void init(InitContext const&)
   {
-    
-    //Tower mean energies vs. centrality
-    registry.add("meanE/hZNA_mean_t1_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNA_mean_t2_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNA_mean_t3_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNA_mean_t4_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNA_mean_common_cent","", {HistType::kTProfile, {{axisCent}}});
-    
-    registry.add("meanE/hZNC_mean_t1_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNC_mean_t2_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNC_mean_t3_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNC_mean_t4_cent","", {HistType::kTProfile, {{axisCent}}});
-    registry.add("meanE/hZNC_mean_common_cent","", {HistType::kTProfile, {{axisCent}}});
-    
-    // before
-    registry.add("before/hZNA_Qx_vs_Qy","hZNA_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    registry.add("before/hZNC_Qx_vs_Qy","hZNC_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    
-    
-    registry.add("before/hQXA_QXC_vs_cent","hQXA_QXC_vs_cent", {HistType::kTProfile, {axisCent10}});
-    registry.add("before/hQYA_QYC_vs_cent","hQYA_QYC_vs_cent", {HistType::kTProfile, {axisCent10}});
-    registry.add("before/hQXC_QYA_vs_cent","hQXC_QYA_vs_cent", {HistType::kTProfile, {axisCent10}});
-    registry.add("before/hQYC_QXA_vs_cent","hQYC_QXA_vs_cent", {HistType::kTProfile, {axisCent10}});
-    
-    //step1
-    registry.add("step1/hZNA_Qx_vs_Qy","hZNA_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    registry.add("step1/hZNC_Qx_vs_Qy","hZNC_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    
-    registry.add("step1/hQXA_mean_1perCent_Run","hQXA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-    registry.add("step1/hQYA_mean_1perCent_Run","hQYA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-    registry.add("step1/hQXC_mean_1perCent_Run","hQXC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-    registry.add("step1/hQYC_mean_1perCent_Run","hQYC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+    ccdb->setURL("http://alice-ccdb.cern.ch");
+       ccdb->setCaching(true);
+       ccdb->setLocalObjectValidityChecking();
 
-    //step2
+       int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+       ccdb->setCreatedNotAfter(now);
     
-    registry.add("step2/hZNA_Qx_vs_Qy","hZNA_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    registry.add("step2/hZNC_Qx_vs_Qy","hZNC_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
+    //Tower mean energies vs. centrality ( common=t0 )
+    for(int tower = 0; tower<5; tower++){
+      ZN_Energy[tower] = registry.add<TProfile2D>(Form("Energy/hZNA_mean_t%i_cent", tower),"", kTProfile2D, {{1,0,1},axisCent});
+      ZN_Energy[tower+5] = registry.add<TProfile2D>(Form("Energy/hZNC_mean_t%i_cent", tower),"", kTProfile2D, {{1,0,1},axisCent});
+    }
     
-    registry.add("step2/hQXA_mean_10perCent_v","hQXA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-    registry.add("step2/hQYA_mean_10perCent_v","hQYA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-    registry.add("step2/hQXC_mean_10perCent_v","hQXC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-    registry.add("step2/hQYC_mean_10perCent_v","hQYC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+    bool hmeanStep2 = false;
+    bool hmeanStep4 = false;
+    // Qx_vs_Qy for each step for ZNA and ZNC
+    for(int step=0; step<6; step++){
+      for(const char* side : sides){
+        hQx_vs_Qy[step] = registry.add<TH2>(Form("step%i/hZN%s_Qx_vs_Qy", step, side), Form("hZN%s_Qx_vs_Qy",side), kTH2F, {axisQ,axisQ});
+      }
+      if(step==0 || step==5){
+        int i=0;
+        for(const char* COORD1 : COORDS){
+          for(const char* COORD2 : COORDS){
+            // Now we get: <XX> <XY> & <YX> <YY> : do only before (step0) and after (step5) of recentring.
+            COORD_correlations[step % 5][i] = registry.add<TProfile>(Form("step%i/hQ%sA_Q%sC_vs_cent",step, COORD1, COORD2), Form("hQ%sA_Q%sC_vs_cent",COORD1, COORD2), kTProfile, {axisCent10});
+            i++;
+          }
+        }
+      }
+      for(const char* side : sides){
+        for(const char* coord : COORDS){
+          if(step==1){
+            registry.add(Form("step%i/hQ%s%s_mean_1perCent_Run", step, coord, side),Form("hQ%s%s_mean_1perCent_Run", coord, side), {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+          }
+          if (step==2){
+            registry.add(Form("step%i/hQ%s%s_mean_10perCent_v", step, coord, side),Form("hQ%s%s_mean_10perCent_v", coord, side), {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+            if(!hmeanStep2) {
+              for (const char*  c : coords){
+                registry.add(Form("step%i/hv%s_mean_Run", step, c),Form("hv%s_mean_Run", c), {HistType::kTProfile, {{1,0.,1.}}});}
+            }
+            hmeanStep2=true;
+          }
+          if (step==3){
+            registry.add(Form("step%i/hQ%s%s_mean_10perCent_Run", step, coord, side),Form("hQ%s%s_mean_10perCent_Run", coord, side), {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+          }
+          if (step==4){
+            if(!hmeanStep4) {
+              registry.add(Form("step%i/hmeanN_1perCent_Run",step),"hmeanN_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+              hmeanStep4 = true;
+            }
+            registry.add(Form("step%i/hQ%s%s_mean_Magnet_10perCent_v", step, coord, side),Form("hQ%s%s_mean_Magnet_10perCent_v", coord, side), {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+          }
+          if (step==5){
+            registry.add(Form("step%i/hQ%s%s_mean_run_cent10_Mult", step, coord, side),Form("hQ%s%s_mean_run_cent10_Mult", coord, side), {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+          }
+        }// end of COORDS
+      } //end of sides
+      
+      
+    } // end of sum over steps
+      
     
-    registry.add("step2/hvx_mean_Run","hvx_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
-    registry.add("step2/hvy_mean_Run","hvy_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
-    registry.add("step2/hvz_mean_Run","hvz_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
-    
-    //step 3
-    registry.add("step3/hZNA_Qx_vs_Qy","hZNA_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    registry.add("step3/hZNC_Qx_vs_Qy","hZNC_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    
-    registry.add("step3/hQXA_mean_10perCent_Run","hQXA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-    registry.add("step3/hQYA_mean_10perCent_Run","hQYA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-    registry.add("step3/hQXC_mean_10perCent_Run","hQXC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-    registry.add("step3/hQYC_mean_10perCent_Run","hQYC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-    
-    // cross terms
-    registry.add("step3/hQXA_Run_10perCent_vy","hQXA_Run_10perCent_vy", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
-    registry.add("step3/hQXA_Run_10perCent_vz","hQXA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-    
-    registry.add("step3/hQYA_Run_10perCent_vx","hQYA_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
-    registry.add("step3/hQYA_Run_10perCent_vz","hQYA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-    
-    registry.add("step3/hQXC_Run_10perCent_vy","hQXC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
-    registry.add("step3/hQXC_Run_10perCent_vz","hQXC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-    
-    registry.add("step3/hQYC_Run_10perCent_vx","hQYC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
-    registry.add("step3/hQYC_Run_10perCent_vz","hQYC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-    
+      
+//      //step1
+// DONE
+//      registry.add("step1/hQXA_mean_1perCent_Run","hQXA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      registry.add("step1/hQYA_mean_1perCent_Run","hQYA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      registry.add("step1/hQXC_mean_1perCent_Run","hQXC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      registry.add("step1/hQYC_mean_1perCent_Run","hQYC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      
+//      //step2
+//   DONE
+//      registry.add("step2/hQXA_mean_10perCent_v","hQXA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step2/hQYA_mean_10perCent_v","hQYA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step2/hQXC_mean_10perCent_v","hQXC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step2/hQYC_mean_10perCent_v","hQYC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//   DONE
+//      registry.add("step2/hvx_mean_Run","hvx_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
+//      registry.add("step2/hvy_mean_Run","hvy_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
+//      registry.add("step2/hvz_mean_Run","hvz_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
+//      
+//      //step 3
+//   DONE
+//      registry.add("step3/hQXA_mean_10perCent_Run","hQXA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      registry.add("step3/hQYA_mean_10perCent_Run","hQYA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      registry.add("step3/hQXC_mean_10perCent_Run","hQXC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      registry.add("step3/hQYC_mean_10perCent_Run","hQYC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      
+//      // cross terms
+//    NOT DONE
+//      registry.add("step3/hQXA_Run_10perCent_vy","hQXA_Run_10perCent_vy", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
+//      registry.add("step3/hQXA_Run_10perCent_vz","hQXA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      registry.add("step3/hQYA_Run_10perCent_vx","hQYA_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
+//      registry.add("step3/hQYA_Run_10perCent_vz","hQYA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      registry.add("step3/hQXC_Run_10perCent_vy","hQXC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
+//      registry.add("step3/hQXC_Run_10perCent_vz","hQXC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      registry.add("step3/hQYC_Run_10perCent_vx","hQYC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
+//      registry.add("step3/hQYC_Run_10perCent_vz","hQYC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      
+//      
+//      //step 4
+//    NOT DONE
+//      registry.add("step4/hmeanN_1perCent_Run","hmeanN_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//   DONE
+//      registry.add("step4/hQXA_mean_Magnet_10perCent_v","hQXA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step4/hQYA_mean_Magnet_10perCent_v","hQYA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step4/hQXC_mean_Magnet_10perCent_v","hQXC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step4/hQYC_mean_Magnet_10perCent_v","hQYC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      
+//      //step 5
+//    DONE
+//      registry.add("step5/hQXA_mean_run_cent10_Mult","hQXA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//      registry.add("step5/hQYA_mean_run_cent10_Mult","hQYA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//      registry.add("step5/hQXC_mean_run_cent10_Mult","hQXC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//      registry.add("step5/hQYC_mean_run_cent10_Mult","hQYC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//
 
-    
-    //step 4
-    registry.add("step4/hZNA_Qx_vs_Qy","hZNA_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    registry.add("step4/hZNC_Qx_vs_Qy","hZNC_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    
-    registry.add("step4/hmeanN_1perCent_Run","hmeanN_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-    
-    registry.add("step4/hQXA_mean_Magnet_10perCent_v","hQXA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-    registry.add("step4/hQYA_mean_Magnet_10perCent_v","hQYA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-    registry.add("step4/hQXC_mean_Magnet_10perCent_v","hQXC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-    registry.add("step4/hQYC_mean_Magnet_10perCent_v","hQYC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-    
-    //step 5
-    registry.add("step5/hZNA_Qx_vs_Qy","hZNA_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    registry.add("step5/hZNC_Qx_vs_Qy","hZNC_Qx_vs_Qy", {HistType::kTH2F, {axisQ,axisQ}});
-    
-    registry.add("step5/hQXA_mean_run_cent10_Mult","hQXA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-    registry.add("step5/hQYA_mean_run_cent10_Mult","hQYA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-    registry.add("step5/hQXC_mean_run_cent10_Mult","hQXC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-    registry.add("step5/hQYC_mean_run_cent10_Mult","hQYC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-    
-    registry.add("step5/hQXA_QXC_vs_cent","hQXA_QXC_vs_cent", {HistType::kTProfile, {axisCent10}});
-    registry.add("step5/hQYA_QYC_vs_cent","hQYA_QYC_vs_cent", {HistType::kTProfile, {axisCent10}});
-    registry.add("step5/hQXC_QYA_vs_cent","hQXC_QYA_vs_cent", {HistType::kTProfile, {axisCent10}});
-    registry.add("step5/hQYC_QXA_vs_cent","hQYC_QXA_vs_cent", {HistType::kTProfile, {axisCent10}});
-    
     // recentered q-vectors
-    registry.add("hStep","hStep", {HistType::kTH1D, {{5,0.,5.}}});
-    
+//    registry.add("hStep","hStep", {HistType::kTH1D, {{5,0.,5.}}});
+    LOGF(info, "................................ ===========> SETUP CALIBRATION <=========== ................................");
+    setupCalibration(); // find out what caibration histos are available and at what step to proceed.
+    LOGF(info, "................................... ===========> SETUP DONE <=========== ....................................");
   }
   
-//  template <typename CollisionObject>
-//  inline void fillMeanRegistry(double cent, CollisionObject collision){
-//    if constexpr(framework::has_type_v<aod::cent::CentRun2V0M, typename CollisionObject::all_columns>) {
-//      registry.fill(HIST("hZNA_mean_common_cent"),int(cent),collision.foundZDC().energyCommonZNA());
-//      registry.fill(HIST("hZNA_mean_t1_cent"),int(cent),collision.foundZDC().energySectorZNA()[0]);
-//      registry.fill(HIST("hZNA_mean_t2_cent"),int(cent),collision.foundZDC().energySectorZNA()[1]);
-//      registry.fill(HIST("hZNA_mean_t3_cent"),int(cent),collision.foundZDC().energySectorZNA()[2]);
-//      registry.fill(HIST("hZNA_mean_t4_cent"),int(cent),collision.foundZDC().energySectorZNA()[3]);
-//      
-//      registry.fill(HIST("hZNC_mean_common_cent"),int(cent),collision.foundZDC().energyCommonZNC());
-//      registry.fill(HIST("hZNC_mean_t1_cent"),int(cent),collision.foundZDC().energySectorZNC()[0]);
-//      registry.fill(HIST("hZNC_mean_t2_cent"),int(cent),collision.foundZDC().energySectorZNC()[1]);
-//      registry.fill(HIST("hZNC_mean_t3_cent"),int(cent),collision.foundZDC().energySectorZNC()[2]);
-//      registry.fill(HIST("hZNC_mean_t4_cent"),int(cent),collision.foundZDC().energySectorZNC()[3]);
-//      
-//    } else if constexpr (framework::has_type_v<aod::cent::CentFT0C, typename CollisionObject::all_columns>){
-//      registry.fill(HIST("hZNA_mean_common_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energyCommonZNA());
-//      registry.fill(HIST("hZNA_mean_t1_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNA()[0]);
-//      registry.fill(HIST("hZNA_mean_t2_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNA()[1]);
-//      registry.fill(HIST("hZNA_mean_t3_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNA()[2]);
-//      registry.fill(HIST("hZNA_mean_t4_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNA()[3]);
-//      
-//      registry.fill(HIST("hZNC_mean_common_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energyCommonZNC());
-//      registry.fill(HIST("hZNC_mean_t1_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNC()[0]);
-//      registry.fill(HIST("hZNC_mean_t2_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNC()[1]);
-//      registry.fill(HIST("hZNC_mean_t3_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNC()[2]);
-//      registry.fill(HIST("hZNC_mean_t4_cent"),int(cent),collision.foundBC_as<BCsRun3>().zdc().energySectorZNC()[3]);
-//    }
-//  }
+
   //qxa, qya, qxc, qyc, vx, vy, vz, centrality, trackmultiplicity, runnumber, polarity
   inline void fillRegistry(int step, double qxa, double qya, double qxc, double qyc, double vx, double vy, double vz,  double centrality, double trackmultiplicity, int runnumber, double polarity)
   {
     //    LOGF(info, "centrality = %.2f", centrality);
     //TODO: dit kan korter door vector van histos te maken, kan dan ook in loopje worden gevuld.
     if(step==0){
-      registry.get<TProfile>(HIST("before/hQXA_QXC_vs_cent"))->Fill(centrality,qxa*qxc);
-      registry.get<TProfile>(HIST("before/hQYA_QYC_vs_cent"))->Fill(centrality,qya*qyc);
-      registry.get<TProfile>(HIST("before/hQXC_QYA_vs_cent"))->Fill(centrality,qxc*qya);
-      registry.get<TProfile>(HIST("before/hQYC_QXA_vs_cent"))->Fill(centrality,qyc*qxa);
+      registry.get<TProfile>(HIST("step0/hQXA_QXC_vs_cent"))->Fill(centrality,qxa*qxc);
+      registry.get<TProfile>(HIST("step0/hQYA_QYC_vs_cent"))->Fill(centrality,qya*qyc);
+      registry.get<TProfile>(HIST("step0/hQXC_QYA_vs_cent"))->Fill(centrality,qxc*qya);
+      registry.get<TProfile>(HIST("step0/hQYC_QXA_vs_cent"))->Fill(centrality,qyc*qxa);
       
-      
-      registry.fill(HIST("before/hZNA_Qx_vs_Qy"),qxa, qya);
-      registry.fill(HIST("before/hZNC_Qx_vs_Qy"),qxc, qyc);
+      registry.fill(HIST("step0/hZNA_Qx_vs_Qy"),qxa, qya);
+      registry.fill(HIST("step0/hZNC_Qx_vs_Qy"),qxc, qyc);
       
       registry.get<TProfile2D>(HIST("step1/hQXA_mean_1perCent_Run"))->Fill(Form("%d", runnumber),centrality,qxa,1);
       registry.get<TProfile2D>(HIST("step1/hQXC_mean_1perCent_Run"))->Fill(Form("%d", runnumber),centrality,qxc,1);
@@ -304,103 +323,103 @@ struct ZDCqvectors{
       
     }
     
-    if(step==1){
-      registry.fill(HIST("step1/hZNA_Qx_vs_Qy"),qxa, qya);
-      registry.fill(HIST("step1/hZNC_Qx_vs_Qy"),qxc, qyc);
-      
-      registry.fill(HIST("step2/hQXA_mean_10perCent_v"), centrality, vx, vy, vz, qxa);
-      registry.fill(HIST("step2/hQYA_mean_10perCent_v"), centrality, vx, vy, vz, qya);
-      registry.fill(HIST("step2/hQXC_mean_10perCent_v"), centrality, vx, vy, vz, qxc);
-      registry.fill(HIST("step2/hQYC_mean_10perCent_v"), centrality, vx, vy, vz, qyc);
-      
-      registry.get<TProfile>(HIST("step2/hvx_mean_Run"))->Fill(Form("%d",runnumber), vx);
-      registry.get<TProfile>(HIST("step2/hvy_mean_Run"))->Fill(Form("%d",runnumber), vy);
-      registry.get<TProfile>(HIST("step2/hvz_mean_Run"))->Fill(Form("%d",runnumber), vz);
-      
-      registry.fill(HIST("hStep"), .5, 1);
-    }
+//    if(step==1){
+//      registry.fill(HIST("step1/hZNA_Qx_vs_Qy"),qxa, qya);
+//      registry.fill(HIST("step1/hZNC_Qx_vs_Qy"),qxc, qyc);
+//      
+//      registry.fill(HIST("step2/hQXA_mean_10perCent_v"), centrality, vx, vy, vz, qxa);
+//      registry.fill(HIST("step2/hQYA_mean_10perCent_v"), centrality, vx, vy, vz, qya);
+//      registry.fill(HIST("step2/hQXC_mean_10perCent_v"), centrality, vx, vy, vz, qxc);
+//      registry.fill(HIST("step2/hQYC_mean_10perCent_v"), centrality, vx, vy, vz, qyc);
+//      
+//      registry.get<TProfile>(HIST("step2/hvx_mean_Run"))->Fill(Form("%d",runnumber), vx);
+//      registry.get<TProfile>(HIST("step2/hvy_mean_Run"))->Fill(Form("%d",runnumber), vy);
+//      registry.get<TProfile>(HIST("step2/hvz_mean_Run"))->Fill(Form("%d",runnumber), vz);
+//      
+//      registry.fill(HIST("hStep"), .5, 1);
+//    }
     
-    if(step==2){
-      
-      registry.fill(HIST("step2/hZNA_Qx_vs_Qy"),qxa, qya);
-      registry.fill(HIST("step2/hZNC_Qx_vs_Qy"),qxc, qyc);
-      
-      // cross terms -> Denk niet vz!
-      registry.fill(HIST("step3/hQXA_Run_10perCent_vy"), runnumber, centrality, vy, qxa);
-      registry.fill(HIST("step3/hQXA_Run_10perCent_vz"), runnumber, centrality, vz, qxa);
-      registry.fill(HIST("step3/hQYA_Run_10perCent_vx"), runnumber, centrality, vx, qya);
-      registry.fill(HIST("step3/hQYA_Run_10perCent_vz"), runnumber, centrality, vz, qya);
-      registry.fill(HIST("step3/hQXC_Run_10perCent_vy"), runnumber, centrality, vy, qxc);
-      registry.fill(HIST("step3/hQXC_Run_10perCent_vz"), runnumber, centrality, vz, qxc);
-      registry.fill(HIST("step3/hQYC_Run_10perCent_vx"), runnumber, centrality, vx, qyc);
-      registry.fill(HIST("step3/hQYC_Run_10perCent_vz"), runnumber, centrality, vz, qyc);
-      
-      // fill with zeros for fitting later.
-      registry.get<TProfile2D>(HIST("step3/hQXA_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
-      registry.get<TProfile2D>(HIST("step3/hQXC_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
-      registry.get<TProfile2D>(HIST("step3/hQYA_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
-      registry.get<TProfile2D>(HIST("step3/hQYC_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
-
-      
-      registry.fill(HIST("hStep"), 1.5, 1);
-      
-    }
-    
-    
-    if(step==3){
-      registry.fill(HIST("step3/hZNA_Qx_vs_Qy"),qxa, qya);
-      registry.fill(HIST("step3/hZNC_Qx_vs_Qy"),qxc, qyc);
-      
-      registry.fill(HIST("step4/hQXA_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qxa);
-      registry.fill(HIST("step4/hQYA_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qya);
-      registry.fill(HIST("step4/hQXC_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qxc);
-      registry.fill(HIST("step4/hQYC_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qyc);
-      
-      registry.get<TProfile2D>(HIST("step4/hmeanN_1perCent_Run"))->Fill(Form("%d",runnumber), centrality, trackmultiplicity,1);
-
-      registry.get<TProfile>(HIST("step3/hQXA_vs_vx"))->Fill(vx, qxa);
-      registry.get<TProfile>(HIST("step3/hQYA_vs_vx"))->Fill(vx, qya);
-      registry.get<TProfile>(HIST("step3/hQXC_vs_vx"))->Fill(vx, qxc);
-      registry.get<TProfile>(HIST("step3/hQYC_vs_vx"))->Fill(vx, qyc);
-      
-      registry.get<TProfile>(HIST("step3/hQXA_vs_vy"))->Fill(vy, qxa);
-      registry.get<TProfile>(HIST("step3/hQYA_vs_vy"))->Fill(vy, qya);
-      registry.get<TProfile>(HIST("step3/hQXC_vs_vy"))->Fill(vy, qxc);
-      registry.get<TProfile>(HIST("step3/hQYC_vs_vy"))->Fill(vy, qyc);
-      
-      registry.get<TProfile>(HIST("step3/hQXA_vs_vz"))->Fill(vz, qxa);
-      registry.get<TProfile>(HIST("step3/hQYA_vs_vz"))->Fill(vz, qya);
-      registry.get<TProfile>(HIST("step3/hQXC_vs_vz"))->Fill(vz, qxc);
-      registry.get<TProfile>(HIST("step3/hQYC_vs_vz"))->Fill(vz, qyc);
-      
-      registry.fill(HIST("hStep"), 2.5, 1);
-    }
-    
-    if(step==4){
-      
-      registry.fill(HIST("step4/hZNA_Qx_vs_Qy"),qxa, qya);
-      registry.fill(HIST("step4/hZNC_Qx_vs_Qy"),qxc, qyc);
-      
-      registry.fill(HIST("step5/hQXA_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qxa);
-      registry.fill(HIST("step5/hQYA_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qya);
-      registry.fill(HIST("step5/hQXC_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qxc);
-      registry.fill(HIST("step5/hQYC_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qyc);
-      
-      registry.fill(HIST("hStep"), 3.5, 1);
-    }
-    
-    //recentered q-vectors
-    if(step==5){
-      registry.fill(HIST("step5/hZNA_Qx_vs_Qy"),qxa, qya);
-      registry.fill(HIST("step5/hZNC_Qx_vs_Qy"),qxc, qyc);
-      
-      registry.get<TProfile>(HIST("step5/hQXA_QXC_vs_cent"))->Fill(centrality,qxa*qxc);
-      registry.get<TProfile>(HIST("step5/hQYA_QYC_vs_cent"))->Fill(centrality,qya*qyc);
-      registry.get<TProfile>(HIST("step5/hQXC_QYA_vs_cent"))->Fill(centrality,qxc*qya);
-      registry.get<TProfile>(HIST("step5/hQYC_QXA_vs_cent"))->Fill(centrality,qyc*qxa);
-      
-      registry.fill(HIST("hStep"), 4.5, 1);
-    }
+//    if(step==2){
+//      
+//      registry.fill(HIST("step2/hZNA_Qx_vs_Qy"),qxa, qya);
+//      registry.fill(HIST("step2/hZNC_Qx_vs_Qy"),qxc, qyc);
+//      
+//      // cross terms -> Denk niet vz!
+//      registry.fill(HIST("step3/hQXA_Run_10perCent_vy"), runnumber, centrality, vy, qxa);
+//      registry.fill(HIST("step3/hQXA_Run_10perCent_vz"), runnumber, centrality, vz, qxa);
+//      registry.fill(HIST("step3/hQYA_Run_10perCent_vx"), runnumber, centrality, vx, qya);
+//      registry.fill(HIST("step3/hQYA_Run_10perCent_vz"), runnumber, centrality, vz, qya);
+//      registry.fill(HIST("step3/hQXC_Run_10perCent_vy"), runnumber, centrality, vy, qxc);
+//      registry.fill(HIST("step3/hQXC_Run_10perCent_vz"), runnumber, centrality, vz, qxc);
+//      registry.fill(HIST("step3/hQYC_Run_10perCent_vx"), runnumber, centrality, vx, qyc);
+//      registry.fill(HIST("step3/hQYC_Run_10perCent_vz"), runnumber, centrality, vz, qyc);
+//      
+//      // fill with zeros for fitting later.
+//      registry.get<TProfile2D>(HIST("step3/hQXA_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
+//      registry.get<TProfile2D>(HIST("step3/hQXC_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
+//      registry.get<TProfile2D>(HIST("step3/hQYA_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
+//      registry.get<TProfile2D>(HIST("step3/hQYC_mean_10perCent_Run"))->Fill(Form("%d", runnumber),centrality,0,1);
+//
+//      
+//      registry.fill(HIST("hStep"), 1.5, 1);
+//      
+//    }
+//    
+//    
+//    if(step==3){
+//      registry.fill(HIST("step3/hZNA_Qx_vs_Qy"),qxa, qya);
+//      registry.fill(HIST("step3/hZNC_Qx_vs_Qy"),qxc, qyc);
+//      
+//      registry.fill(HIST("step4/hQXA_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qxa);
+//      registry.fill(HIST("step4/hQYA_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qya);
+//      registry.fill(HIST("step4/hQXC_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qxc);
+//      registry.fill(HIST("step4/hQYC_mean_Magnet_10perCent_v"), polarity, centrality, vx, vy, vz, qyc);
+//      
+//      registry.get<TProfile2D>(HIST("step4/hmeanN_1perCent_Run"))->Fill(Form("%d",runnumber), centrality, trackmultiplicity,1);
+//
+//      registry.get<TProfile>(HIST("step3/hQXA_vs_vx"))->Fill(vx, qxa);
+//      registry.get<TProfile>(HIST("step3/hQYA_vs_vx"))->Fill(vx, qya);
+//      registry.get<TProfile>(HIST("step3/hQXC_vs_vx"))->Fill(vx, qxc);
+//      registry.get<TProfile>(HIST("step3/hQYC_vs_vx"))->Fill(vx, qyc);
+//      
+//      registry.get<TProfile>(HIST("step3/hQXA_vs_vy"))->Fill(vy, qxa);
+//      registry.get<TProfile>(HIST("step3/hQYA_vs_vy"))->Fill(vy, qya);
+//      registry.get<TProfile>(HIST("step3/hQXC_vs_vy"))->Fill(vy, qxc);
+//      registry.get<TProfile>(HIST("step3/hQYC_vs_vy"))->Fill(vy, qyc);
+//      
+//      registry.get<TProfile>(HIST("step3/hQXA_vs_vz"))->Fill(vz, qxa);
+//      registry.get<TProfile>(HIST("step3/hQYA_vs_vz"))->Fill(vz, qya);
+//      registry.get<TProfile>(HIST("step3/hQXC_vs_vz"))->Fill(vz, qxc);
+//      registry.get<TProfile>(HIST("step3/hQYC_vs_vz"))->Fill(vz, qyc);
+//      
+//      registry.fill(HIST("hStep"), 2.5, 1);
+//    }
+//    
+//    if(step==4){
+//      
+//      registry.fill(HIST("step4/hZNA_Qx_vs_Qy"),qxa, qya);
+//      registry.fill(HIST("step4/hZNC_Qx_vs_Qy"),qxc, qyc);
+//      
+//      registry.fill(HIST("step5/hQXA_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qxa);
+//      registry.fill(HIST("step5/hQYA_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qya);
+//      registry.fill(HIST("step5/hQXC_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qxc);
+//      registry.fill(HIST("step5/hQYC_mean_run_cent10_Mult"), runnumber, centrality, trackmultiplicity, qyc);
+//      
+//      registry.fill(HIST("hStep"), 3.5, 1);
+//    }
+//    
+//    //recentered q-vectors
+//    if(step==5){
+//      registry.fill(HIST("step5/hZNA_Qx_vs_Qy"),qxa, qya);
+//      registry.fill(HIST("step5/hZNC_Qx_vs_Qy"),qxc, qyc);
+//      
+//      registry.get<TProfile>(HIST("step5/hQXA_QXC_vs_cent"))->Fill(centrality,qxa*qxc);
+//      registry.get<TProfile>(HIST("step5/hQYA_QYC_vs_cent"))->Fill(centrality,qya*qyc);
+//      registry.get<TProfile>(HIST("step5/hQXC_QYA_vs_cent"))->Fill(centrality,qxc*qya);
+//      registry.get<TProfile>(HIST("step5/hQYC_QXA_vs_cent"))->Fill(centrality,qyc*qxa);
+//      
+//      registry.fill(HIST("hStep"), 4.5, 1);
+//    }
   }
   
 
@@ -412,11 +431,19 @@ struct ZDCqvectors{
   }
   
   template <typename T>
-  bool retrieveAndCheck(std::vector<T*>& vec, const char* names[], const char* filename, const char* fullPath, const char* histname, bool closeFile = false) {
+  bool retrieveAndCheck(std::vector<T*>& vec, 
+                        const char* filename,
+                        const char* fullPath,
+                        std::vector<const char*> names,
+                        const char* histname,
+                        bool closeFile = false) {
       
       bool file_open = true;
       TFile* file = nullptr;
-      
+    
+    //TODO: here sum over the histos defined in init add: loop over the shared pointers to check if they are available in the file. No need to specify the names seperately.
+    //TODO: input just: vec of filenames, folder & file to search in!
+    
       // Check if the file is already open
       if (gROOT->GetListOfFiles()->FindObject(filename)) {
           file = (TFile*)gROOT->GetListOfFiles()->FindObject(filename);
@@ -433,7 +460,7 @@ struct ZDCqvectors{
         for (int i = 0; names[i] != nullptr; ++i) {
             vec[i] = (T*)file->Get(Form("%s%s%s", fullPath, names[i], histname));
             if (!vec[i] || vec[i]->GetEntries() < 1) {
-              LOGF(info, "%s%s_%s not found! Abort mission", fullPath, names[i], histname);
+              LOGF(info, "%s%s%s not found or empty! Produce calibration file at given step", fullPath, names[i], histname);
               if (closeFile) {
                 file->Close();
                 delete file;
@@ -453,22 +480,25 @@ struct ZDCqvectors{
   
   void setupCalibration()
   {
-    const char* names_hQ[4] = {"QXA", "QYA", "QXC", "QYC"};
-    const char* names_vcoord[3] = {"vx", "vy", "vz"};
-    const char* ZN_towers[10] = {"hZNA_mean_common", "hZNC_mean_common", "hZNA_mean_t1", "hZNA_mean_t2", "hZNA_mean_t3", "hZNA_mean_t4", "hZNC_mean_t1", "hZNC_mean_t2", "hZNC_mean_t3", "hZNC_mean_t4"};
+    std::vector<const char*> names_hQ = {"QXA", "QYA", "QXC", "QYC"};
+    std::vector<const char*> names_vcoord = {"vx", "vy", "vz"};
+    std::vector<const char*> ZN_towers = {"t0", "t1", "t2", "t3", "t4"};
     
-    if(retrieveAndCheck(hZN_mean, ZN_towers, cfgCalibenergy->c_str(), "z-d-c-analysis/", "_cent", true)){
+    if(retrieveAndCheck(hZN_mean, cfgQvecrecent->c_str(), "z-d-cqvectors/Energy/hZNA_mean_", ZN_towers, "_cent") &&
+       retrieveAndCheck(hZN_mean, cfgQvecrecent->c_str(), "z-d-cqvectors/Energy/hZNC_mean_", ZN_towers, "_cent")){
       step0_open = true;
-    } else return;
+    } else {  
+      LOGF(info, "we return");
+      return; }
 
-    if (retrieveAndCheck(mean_1perCent_Run, names_hQ, cfgQvecrecent->c_str(), "z-d-cqvectors/step1/h","_mean_1perCent_Run", true)) {
+    if (retrieveAndCheck(mean_1perCent_Run, cfgQvecrecent->c_str(), "z-d-cqvectors/step1/h",names_hQ,"_mean_1perCent_Run", true)) {
       step1_open = true;
-    } else return;
+    } else { return; }
 
-    if (retrieveAndCheck(mean_10perCent_v, names_hQ, cfgQvecrecent->c_str(), "z-d-cqvectors/step2/h", "_mean_10perCent_v") &&
-        retrieveAndCheck(v_mean_Run, names_vcoord, cfgQvecrecent->c_str(), "z-d-cqvectors/step2/h", "_mean_Run") ){
+    if (retrieveAndCheck(mean_10perCent_v,  cfgQvecrecent->c_str(), "z-d-cqvectors/step2/h",names_hQ, "_mean_10perCent_v") &&
+        retrieveAndCheck(v_mean_Run,  cfgQvecrecent->c_str(), "z-d-cqvectors/step2/h", names_vcoord,"_mean_Run") ){
       step2_open = true;
-        } else return;
+    } else { return;}
     
 //    if (retrieveAndCheck(hFit_Run_Cent_vx,{names_hQ[1],names_hQ[3]},cfgOutFitStep3->c_str(),"hFit_","_Run_Cent_vx" )
 //        && retrieveAndCheck(hFit_Run_Cent_vy,{names_hQ[0],names_hQ[2]},cfgOutFitStep3->c_str(),"hFit_","_Run_Cent_vy" )
@@ -516,101 +546,91 @@ struct ZDCqvectors{
   }
   
   
-  double getQstep2(double q_step1, THnSparseD* mean, int cent, double vxmean, double vymean, double vzmean)
+
+  
+    int getMagneticField(uint64_t timestamp)
+    {
+      // TODO done only once (and not per run). Will be replaced by CCDBConfigurable
+      // static o2::parameters::GRPObject* grpo = nullptr;
+      static o2::parameters::GRPMagField* grpo = nullptr;
+      if (grpo == nullptr) {
+        // grpo = ccdb->getForTimeStamp<o2::parameters::GRPObject>("GLO/GRP/GRP", timestamp);
+        grpo = ccdb->getForTimeStamp<o2::parameters::GRPMagField>("GLO/Config/GRPMagField", timestamp);
+        if (grpo == nullptr) {
+          LOGF(fatal, "GRP object not found for timestamp %llu", timestamp);
+          return 0;
+        }
+        LOGF(info, "Retrieved GRP for timestamp %llu with magnetic field of %d kG", timestamp, grpo->getNominalL3Field());
+      }
+      return grpo->getNominalL3Field();
+    }
+  
+  double recenterQfromTHn(double qBef, THnSparseD* meanObject, std::vector<double> variables)
   {
+    // Make sure the meanObjects have the Axis filled in the same order as variables with the last axis containing the Q-vectors!
     double mean_q =0.;
+    std::vector<int> bins;
+    for(int i=0; i<variables.size(); i++){
+      bins.push_back(FindBinWithContentAlongAxis( meanObject, i, variables[i]));
+      meanObject->GetAxis(i)->SetRange(bins[i], bins[i]);
+    }
+    mean_q = meanObject->Projection(variables.size())->GetMean();
     
+    double qAft = qBef - mean_q;
     
-    // do we need to find the bins of v and i
-    int bin_cent =   FindBinWithContentAlongAxis(mean, 0, cent);
-    int bin_vxmean = FindBinWithContentAlongAxis(mean, 1, vxmean);
-    int bin_vymean = FindBinWithContentAlongAxis(mean, 2, vymean);
-    int bin_vzmean = FindBinWithContentAlongAxis(mean, 3, vzmean);
-    
-    mean->GetAxis(0)->SetRange(bin_cent, bin_cent);
-    mean->GetAxis(1)->SetRange(bin_vxmean, bin_vxmean);
-    mean->GetAxis(2)->SetRange(bin_vymean, bin_vymean);
-    mean->GetAxis(3)->SetRange(bin_vzmean, bin_vzmean);
-    
-    mean_q = mean->Projection(4)->GetMean();
-    
-    double q_step2 = q_step1 - mean_q;
-    
-    return q_step2;
+    return qAft;
   }
   
+  //From step4:
+  //double pol, double cent, double vxmean, double vymean, double vzmean)
   
-  //  int getMagneticField(uint64_t timestamp)
+  //  double getQstep2(double q_step1, THnSparseD* mean, int cent, double vxmean, double vymean, double vzmean)
   //  {
-  //    // TODO done only once (and not per run). Will be replaced by CCDBConfigurable
-  //    // static o2::parameters::GRPObject* grpo = nullptr;
-  //    static o2::parameters::GRPMagField* grpo = nullptr;
-  //    if (grpo == nullptr) {
-  //      // grpo = ccdb->getForTimeStamp<o2::parameters::GRPObject>("GLO/GRP/GRP", timestamp);
-  //      grpo = ccdb->getForTimeStamp<o2::parameters::GRPMagField>("GLO/Config/GRPMagField", timestamp);
-  //      if (grpo == nullptr) {
-  //        LOGF(fatal, "GRP object not found for timestamp %llu", timestamp);
-  //        return 0;
-  //      }
-  //      LOGF(info, "Retrieved GRP for timestamp %llu with magnetic field of %d kG", timestamp, grpo->getNominalL3Field());
-  //    }
-  //    return grpo->getNominalL3Field();
+  //    double mean_q =0.;
+  //
+  //
+  //    // do we need to find the bins of v and i
+  //    int bin_cent =   FindBinWithContentAlongAxis(mean, 0, cent);
+  //    int bin_vxmean = FindBinWithContentAlongAxis(mean, 1, vxmean);
+  //    int bin_vymean = FindBinWithContentAlongAxis(mean, 2, vymean);
+  //    int bin_vzmean = FindBinWithContentAlongAxis(mean, 3, vzmean);
+  //
+  //    mean->GetAxis(0)->SetRange(bin_cent, bin_cent);
+  //    mean->GetAxis(1)->SetRange(bin_vxmean, bin_vxmean);
+  //    mean->GetAxis(2)->SetRange(bin_vymean, bin_vymean);
+  //    mean->GetAxis(3)->SetRange(bin_vzmean, bin_vzmean);
+  //
+  //    mean_q = mean->Projection(4)->GetMean();
+  //
+  //    double q_step2 = q_step1 - mean_q;
+  //
+  //    return q_step2;
   //  }
+    
   
-  double getQstep4(double q_step3, THnSparseD* mean, double cent, double vxmean, double vymean, double vzmean, double pol)
-  {
-    
-    double mean_q =0.;
-    
-    
-    // do we need to find the bins of v and i
-    int bin_pol = (pol>0) ? 2 : 1; // only 2 bins in histo, for positive and negative polarity
-    int bin_cent =   FindBinWithContentAlongAxis(mean, 0, cent);
-    int bin_vxmean = FindBinWithContentAlongAxis(mean, 1, vxmean);
-    int bin_vymean = FindBinWithContentAlongAxis(mean, 2, vymean);
-    int bin_vzmean = FindBinWithContentAlongAxis(mean, 3, vzmean);
-    
-    mean->GetAxis(0)->SetRange(bin_pol, bin_pol);
-    mean->GetAxis(1)->SetRange(bin_cent, bin_cent);
-    mean->GetAxis(2)->SetRange(bin_vxmean, bin_vxmean);
-    mean->GetAxis(3)->SetRange(bin_vymean, bin_vymean);
-    mean->GetAxis(4)->SetRange(bin_vzmean, bin_vzmean);
-    
-    mean_q = mean->Projection(5)->GetMean();
-    //    LOGF(info, "nEntries proQ step2: %i", proQ->GetEntries());
-    //    mean_q = proQ->GetMean();
-    
-    double q_step4 = q_step3 - mean_q;
-    
-    //    delete proQ;
-    
-    return q_step4;
-  }
-  
-  double getQstep5(double q_step4, THnSparseD* mean, int bin_runnmbr, double cent, double mult)
-  {
-    //
-    
-    double mean_q =0.;
-    
-    
-    //    int bin_runmbr = FindBinWithContentAlongAxis(mean, 0, runN);
-    int bin_cent =   FindBinWithContentAlongAxis(mean, 1, cent);
-    int bin_mult =   FindBinWithContentAlongAxis(mean, 2, mult);
-    
-    mean->GetAxis(0)->SetRange(bin_runnmbr, bin_runnmbr);
-    mean->GetAxis(1)->SetRange(bin_cent, bin_cent);
-    mean->GetAxis(2)->SetRange(bin_mult, bin_mult);
-    
-    
-    mean_q = mean->Projection(3)->GetMean();
-    
-    double q_step5 = q_step4 - mean_q;
-    
-    //    delete proQ;
-    
-    return q_step5;
-  }
+//  double getQstep5(double q_step4, THnSparseD* mean, double runN, double cent, double mult)
+//  {
+//    //
+//    
+//    double mean_q =0.;
+//    
+//    int bin_runmbr = FindBinWithContentAlongAxis(mean, 0, runN);
+//    int bin_cent =   FindBinWithContentAlongAxis(mean, 1, cent);
+//    int bin_mult =   FindBinWithContentAlongAxis(mean, 2, mult);
+//    
+//    mean->GetAxis(0)->SetRange(bin_runnmbr, bin_runnmbr);
+//    mean->GetAxis(1)->SetRange(bin_cent, bin_cent);
+//    mean->GetAxis(2)->SetRange(bin_mult, bin_mult);
+//    
+//    
+//    mean_q = mean->Projection(3)->GetMean();
+//    
+//    double q_step5 = q_step4 - mean_q;
+//    
+//    //    delete proQ;
+//    
+//    return q_step5;
+//  }
   
   inline void PrintMemoryConsumption() {
     ProcInfo_t procInfo;
@@ -621,8 +641,8 @@ struct ZDCqvectors{
     std::cout << "  Virtual memory: " << (double)procInfo.fMemVirtual/(1e6) << " MB" << std::endl;
   }
   
-//  <template T*>
-  bool updateBinForRunNumber(int runNumber, int& lastRunNumber, int& binRunNumber, int& numFoundint, TProfile2D* hist) {
+  template <typename T>
+  bool updateBinForRunNumber(int runNumber, int& lastRunNumber, int& binRunNumber, int& numFoundint, T* hist) {
 
       if (runNumber != lastRunNumber) {
           lastRunNumber = runNumber;
@@ -641,7 +661,7 @@ struct ZDCqvectors{
       }
 
       if (numFoundint != runNumber) {
-          std::cerr << "No match found for RUN NUMBER " << runNumber << std::endl;
+        LOGF(warning,"No match found for RUN NUMBER %i", runNumber);
         return false;
       }
     return true;
@@ -649,22 +669,16 @@ struct ZDCqvectors{
   
 //TODO: void: make function for step 1! Also for step 2,3,4,5 And apply function in processRun2 and ProcessRun3
   
-  void process(myCollisions const& cols,  BCsRun3 const& /*bcs*/, aod::Zdcs const& /*zdcs*/, myTracks const& tracks)
+  void process(myCollisions::iterator const& collision,
+               BCsRun3 const& /*bcs*/,
+               aod::Zdcs const& /*zdcs*/,
+               myTracks const& tracks)
   //Belangrijk dus dat je wel subscribed hier naar aod::Zdcs om toegang te krijgen tot zdc informatie
   {
-    setupCalibration();
-    
-    for(auto& collision : cols){
       // step 0 tm 5 A&C
       double q[6][4]; // 6 steps, each with 4 values
       double v[3]; // vx, vy, vz
       //    double v_mean[3]; // vx_mean, vy_mean, vz_mean
-      
-      //https://alice-notes.web.cern.ch/system/files/notes/analysis/620/017-May-31-analysis_note-ALICE_analysis_note_v2.pdf
-      double ZDC_px[4] = {-1.75, 1.75,-1.75, 1.75};
-      double ZDC_py[4] = {-1.75, -1.75,1.75, 1.75};
-      double alpha = 0.395;
-      //tot hier van die analysis note
       
       // for energy calibration
       double EZN[8]; //uncalibrated energy for the 2x4 towers (a1, a2, a3, a4, c1, c2, c3, c4)
@@ -682,64 +696,55 @@ struct ZDCqvectors{
       if (!collision.sel8())
         return;
       auto cent = collision.centFT0C();
-      //    LOGF(info, " centrality = %f", cent);
       if(cent<0 || cent>90)
         return;
-      
-      
-      // TODO: check how to pick up polarity for run 2!!!
-      //    auto bc = collision.bc_as<aod::BCsWithTimestamps>();
-      //    auto field = (cfgMagField == 999999) ? getMagneticField(bc.timestamp()) : cfgMagField;
-      
-      //variable = (condition) ? expressionTrue : expressionFalse;
-      //    double polarity = (field<0) ? -0.5 : 0.5;
-      
-      // for now just take positive polarity
-      polarity = .5;
-      
+        
       const auto& foundBC = collision.foundBC_as<BCsRun3>();
+      auto field = (cfgMagField == 999999) ? getMagneticField(foundBC.timestamp()) : cfgMagField;
       if(foundBC.has_zdc()){
-        const auto& zdcCol = foundBC.zdc();
         
-        // keep track of memory consumption
         if (counter % 1000 == 0) PrintMemoryConsumption();
-        
-        int runNumber = collision.bc().runNumber();
         
         v[0] = collision.posX();
         v[1] = collision.posY();
         v[2] = collision.posZ();
         centrality = cent;
         trackmultiplicity = tracks.size();
-        runnumber = runNumber;
+        polarity = (field < 0) ? -1. : 1.;
+        
+        int runnumber = foundBC.runNumber();
+        const auto& zdcCol = foundBC.zdc();
         
         
-        for(int i=0; i<4; i++){
-          EZN[i] = zdcCol.energySectorZNA()[i];
-          EZN[i+4] = zdcCol.energySectorZNC()[i];
-        }
-        
-        // Zeroth step: start energy gain equalisation
-        // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-        
-        if(!step0_open){ if(counter<1) LOGF(info, "cannot continue, file energy calibration not open! ...-> Start energy calibration");
-          registry.fill(HIST("hZNA_mean_common_cent"),int(cent),zdcCol.energyCommonZNA());
-          registry.fill(HIST("hZNA_mean_t1_cent"),int(cent),zdcCol.energySectorZNA()[0]);
-          registry.fill(HIST("hZNA_mean_t2_cent"),int(cent),zdcCol.energySectorZNA()[1]);
-          registry.fill(HIST("hZNA_mean_t3_cent"),int(cent),zdcCol.energySectorZNA()[2]);
-          registry.fill(HIST("hZNA_mean_t4_cent"),int(cent),zdcCol.energySectorZNA()[3]);
+        if(!step0_open){
+          if(counter<1) {
+            LOGF(info, "files for step 0 not found " );
+            LOGF(info,"=====================> .....Start Energy Calibration..... <=====================");
+          }
+          if(counter % 1000 == 0 ) LOGF(info, "..................");
           
-          registry.fill(HIST("hZNC_mean_common_cent"),int(cent),zdcCol.energyCommonZNC());
-          registry.fill(HIST("hZNC_mean_t1_cent"),int(cent),zdcCol.energySectorZNC()[0]);
-          registry.fill(HIST("hZNC_mean_t2_cent"),int(cent),zdcCol.energySectorZNC()[1]);
-          registry.fill(HIST("hZNC_mean_t3_cent"),int(cent),zdcCol.energySectorZNC()[2]);
-          registry.fill(HIST("hZNC_mean_t4_cent"),int(cent),zdcCol.energySectorZNC()[3]);
+          for(int tower = 0; tower<5; tower++){
+            if(tower==0){
+              ZN_Energy[tower]->Fill(Form("%d", runnumber), int(cent), zdcCol.energyCommonZNA(),1);
+              ZN_Energy[tower+5]->Fill(Form("%d", runnumber), int(cent), zdcCol.energyCommonZNC(),1);
+            } else {
+              if(zdcCol.energySectorZNA()[tower-1]>0)ZN_Energy[tower]->Fill(Form("%d", runnumber), int(cent), zdcCol.energySectorZNA()[tower-1],1);
+              if(zdcCol.energySectorZNC()[tower-1]>0)ZN_Energy[tower+5]->Fill(Form("%d", runnumber), int(cent), zdcCol.energySectorZNC()[tower-1],1);
+            }
+          }
+          counter++;
+          return;
         }
         
+        // Only go here if step_0 is open! (Bool set to true or falsein setupCalibration())
         if(counter<1) LOGF(info, "files for step 0 (energy Calibraton) are open!");
         
-        if(!updateBinForRunNumber(runNumber, lastRunNumber, binRunNumber, numFoundint, hZN_mean[0])) return;
+        if(!updateBinForRunNumber(runnumber, lastRunNumber, binRunNumber, numFoundint, hZN_mean[0])){
+          LOGF(warning, "Run Energy Calibration for run %i", runnumber);
+          return;
+        }
         
+        // Now start gain equalisation!
         for(int tower=2; tower<10; tower++){
           int common = (tower > 5) ? 1 : 0;
           meanEZN[tower] = hZN_mean[tower]->GetBinContent(int(binRunNumber),int(cent)+1);
@@ -750,9 +755,9 @@ struct ZDCqvectors{
         for(int tower=0; tower<8; tower++){
           int side = (tower > 4) ? 1 : 0;
           int sector = tower % 4;
-          sumZN[side] += TMath::Power(e[tower],alpha);
-          xEnZN[side] += ZDC_px[sector] * TMath::Power(e[tower],alpha);
-          yEnZN[side] += ZDC_py[sector] * TMath::Power(e[tower],alpha);
+          sumZN[side] += TMath::Power(e[tower],alphaZDC);
+          xEnZN[side] += ZDC_px[sector] * TMath::Power(e[tower],alphaZDC);
+          yEnZN[side] += ZDC_py[sector] * TMath::Power(e[tower],alphaZDC);
         }
         
         // "QXA", "QYA", "QXC", "QYC"
@@ -764,8 +769,9 @@ struct ZDCqvectors{
         }
         
         // Here define Q-vectors after energy calibration
-        for(int i=0; i<5; i++) q[0][i] = Q[i];
-        
+        for(int i=0; i<5; i++) {
+          q[0][i] = Q[i];
+        }
         
         if(!step1_open) {
           if (counter<1) LOGF(warning, "File for recentring does not exist | Table processed with non-recentered q-vectors!!!!");
@@ -773,14 +779,14 @@ struct ZDCqvectors{
           fillAllRegistries(q, v, centrality, trackmultiplicity, runnumber, polarity, 0, 1);
           
           counter++;
-          lastRunNumber = runNumber;
+          lastRunNumber = runnumber;
           
           return;
         }
         
         //
         //
-        //              //TODO: dit moet nog in een functie worden gezet!!
+        //              //TODO: dit moet nog in een functie worden gezet!! -> updateBinForRunNumber (check if previous is up and runnuing)
         //      // retrieve runnumber and look up in the mean TProfile2D
         //      if (runNumber != lastRunNumber_step1) {
         //        lastRunNumber_step1 = runNumber;
@@ -888,7 +894,7 @@ struct ZDCqvectors{
         //      qxc4 = getQstep4(qxc3, hQXC_mean_Magnet_10perCent_v, polarity, centrality, vx_mean, vy_mean, vz_mean);
         //      qyc4 = getQstep4(qyc3, hQYC_mean_Magnet_10perCent_v, polarity, centrality, vx_mean, vy_mean, vz_mean);
         //
-        //      //      LOGF(info,"trak multiplicity before = %.2f", trackmultiplicity);
+        //      //      LOGF(info,"trak multiplicity step0 = %.2f", trackmultiplicity);
         //      trackmultiplicity_mean = tracks.size() - hmeanN_1perCent_Run->GetBinContent(bin,int(cent)+1);
         //      //      LOGF(info,"mean trak multiplicity = %.2f", trackmultiplicity_mean);
         //
@@ -929,7 +935,6 @@ struct ZDCqvectors{
         
         
       }// end collision found ZDC
-    } // end of for (col : cols)
   }
 };
 
