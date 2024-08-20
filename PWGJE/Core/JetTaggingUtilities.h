@@ -109,7 +109,7 @@ int getOriginalHFMotherIndex(const typename T::iterator& hfparticle)
  * @param hftrack track passed as reference which is then replaced by the first track that originated from an HF shower
  */
 template <typename T, typename U, typename V>
-int jetTrackFromHFShower(T const& jet, U const& /*tracks*/, V const& particles, typename U::iterator& hftrack)
+int jetTrackFromHFShower(T const& jet, U const& /*tracks*/, V const& particles, typename U::iterator& hftrack, bool searchUpToQuark)
 {
 
   bool hasMcParticle = false;
@@ -120,7 +120,7 @@ int jetTrackFromHFShower(T const& jet, U const& /*tracks*/, V const& particles, 
     }
     hasMcParticle = true;
     auto const& particle = track.template mcParticle_as<V>();
-    origin = RecoDecay::getCharmHadronOrigin(particles, particle, true);
+    origin = RecoDecay::getCharmHadronOrigin(particles, particle, searchUpToQuark);
     if (origin == 1 || origin == 2) { // 1=charm , 2=beauty
       hftrack = track;
       if (origin == 1) {
@@ -146,12 +146,12 @@ int jetTrackFromHFShower(T const& jet, U const& /*tracks*/, V const& particles, 
  * @param hfparticle particle passed as reference which is then replaced by the first track that originated from an HF shower
  */
 template <typename T, typename U>
-int jetParticleFromHFShower(T const& jet, U const& particles, typename U::iterator& hfparticle)
+int jetParticleFromHFShower(T const& jet, U const& particles, typename U::iterator& hfparticle, bool searchUpToQuark)
 {
 
   int origin = -1;
   for (const auto& particle : jet.template tracks_as<U>()) {
-    origin = RecoDecay::getCharmHadronOrigin(particles, particle, true);
+    origin = RecoDecay::getCharmHadronOrigin(particles, particle, searchUpToQuark);
     if (origin == 1 || origin == 2) { // 1=charm , 2=beauty
       hfparticle = particle;
       if (origin == 1) {
@@ -174,11 +174,11 @@ int jetParticleFromHFShower(T const& jet, U const& particles, typename U::iterat
  */
 
 template <typename T, typename U, typename V>
-int mcdJetFromHFShower(T const& jet, U const& tracks, V const& particles, float dRMax = 0.25)
+int mcdJetFromHFShower(T const& jet, U const& tracks, V const& particles, float dRMax = 0.25, bool searchUpToQuark = false)
 {
 
   typename U::iterator hftrack;
-  int origin = jetTrackFromHFShower(jet, tracks, particles, hftrack);
+  int origin = jetTrackFromHFShower(jet, tracks, particles, hftrack, searchUpToQuark);
   if (origin == JetTaggingSpecies::charm || origin == JetTaggingSpecies::beauty) {
     if (!hftrack.has_mcParticle()) {
       return JetTaggingSpecies::none;
@@ -215,11 +215,11 @@ int mcdJetFromHFShower(T const& jet, U const& tracks, V const& particles, float 
  */
 
 template <typename T, typename U>
-int mcpJetFromHFShower(T const& jet, U const& particles, float dRMax = 0.25)
+int mcpJetFromHFShower(T const& jet, U const& particles, float dRMax = 0.25, bool searchUpToQuark = false)
 {
 
   typename U::iterator hfparticle;
-  int origin = jetParticleFromHFShower(jet, particles, hfparticle);
+  int origin = jetParticleFromHFShower(jet, particles, hfparticle, searchUpToQuark);
   if (origin == JetTaggingSpecies::charm || origin == JetTaggingSpecies::beauty) {
 
     int originalHFMotherIndex = getOriginalHFMotherIndex<U>(hfparticle);
@@ -367,13 +367,14 @@ void orderForIPJetTracks(T const& collision, U const& jet, V const& /*jtracks*/,
 template <typename T, typename U, typename V, typename W, typename X, typename Y>
 bool isGreaterThanTaggingPoint(T const& collision, U const& jet, V const& jtracks, W const& tracks, X const& taggingPoint = 1.0, Y const& cnt = 1)
 {
-  if (cnt == 0)
+  if (cnt == 0) {
     return true; // untagged
+  }
   std::vector<float> vecSignImpSig;
   orderForIPJetTracks(collision, jet, jtracks, tracks, vecSignImpSig);
-  if (vecSignImpSig.size() > cnt - 1) {
+  if (vecSignImpSig.size() > static_cast<std::vector<float>::size_type>(cnt) - 1) {
     for (int i = 0; i < cnt; i++) {
-      if (0 < vecSignImpSig[i] && vecSignImpSig[i] < taggingPoint) { // tagger point set
+      if (vecSignImpSig[i] < taggingPoint) { // tagger point set
         return false;
       }
     }
@@ -394,7 +395,7 @@ template <typename T>
 std::unique_ptr<TF1> setResolutionFunction(T const& vecParams)
 {
   std::unique_ptr<TF1> fResoFunc(new TF1("fResoFunc", "gaus(0)+expo(3)+expo(5)+expo(7)", -40, 0));
-  for (int i = 0; i < vecParams.size(); i++) {
+  for (typename T::size_type i = 0; i < vecParams.size(); i++) {
     fResoFunc->SetParameter(i, vecParams[i]);
   }
 
@@ -472,8 +473,8 @@ float getJetProbability(T const& fResoFuncjet, U const& collision, V const& jet,
     return -1;
 
   float sumjetProb = 0.;
-  for (int i = 0; i < jetTracksPt.size(); i++) {
-    sumjetProb += (TMath::Power(-1 * TMath::Log(trackjetProb), i) / TMath::Factorial(i));
+  for (std::vector<float>::size_type i = 0; i < jetTracksPt.size(); i++) {
+    sumjetProb += (TMath::Power(-1 * TMath::Log(trackjetProb), static_cast<int>(i)) / TMath::Factorial(i));
   }
 
   JP = trackjetProb * sumjetProb;

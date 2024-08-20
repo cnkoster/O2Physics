@@ -14,7 +14,7 @@ if(FastJet_FOUND)
 
 o2physics_add_dpl_workflow(jet-deriveddata-producer
                     SOURCES jetderiveddataproducer.cxx
-                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::PWGJECore O2Physics::AnalysisCore
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::PWGJECore O2Physics::AnalysisCore O2Physics::EventFilteringUtils
                     COMPONENT_NAME Analysis)
 
 o2physics_add_dpl_workflow(jet-deriveddata-trigger-producer
@@ -34,6 +34,11 @@ o2physics_add_dpl_workflow(jet-deriveddata-producer-dummy-d0
 
 o2physics_add_dpl_workflow(jet-deriveddata-producer-dummy-lc
                     SOURCES jetderiveddataproducerdummylc.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::PWGJECore O2Physics::AnalysisCore
+                    COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(jet-deriveddata-producer-dummy-dielectron
+                    SOURCES jetderiveddataproducerdummydielectron.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::PWGJECore O2Physics::AnalysisCore
                     COMPONENT_NAME Analysis)
 

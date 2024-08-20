@@ -56,6 +56,9 @@ struct JetFinderHFTask {
   Configurable<float> vertexZCut{"vertexZCut", 10.0f, "Accepted z-vertex range"};
   Configurable<float> centralityMin{"centralityMin", -999.0, "minimum centrality"};
   Configurable<float> centralityMax{"centralityMax", 999.0, "maximum centrality"};
+  Configurable<int> trackOccupancyInTimeRangeMax{"trackOccupancyInTimeRangeMax", 999999, "maximum occupancy of tracks in neighbouring collisions in a given time range"};
+  Configurable<std::string> eventSelections{"eventSelections", "sel8", "choose event selection"};
+  Configurable<std::string> triggerMasks{"triggerMasks", "", "possible JE Trigger masks: fJetChLowPt,fJetChHighPt,fTrackLowPt,fTrackHighPt,fJetD0ChLowPt,fJetD0ChHighPt,fJetLcChLowPt,fJetLcChHighPt,fEMCALReadout,fJetFullHighPt,fJetFullLowPt,fJetNeutralHighPt,fJetNeutralLowPt,fGammaVeryHighPtEMCAL,fGammaVeryHighPtDCAL,fGammaHighPtEMCAL,fGammaHighPtDCAL,fGammaLowPtEMCAL,fGammaLowPtDCAL,fGammaVeryLowPtEMCAL,fGammaVeryLowPtDCAL"};
 
   // track level configurables
   Configurable<float> trackPtMin{"trackPtMin", 0.15, "minimum track pT"};
@@ -64,8 +67,8 @@ struct JetFinderHFTask {
   Configurable<float> trackEtaMax{"trackEtaMax", 0.9, "maximum track eta"};
   Configurable<float> trackPhiMin{"trackPhiMin", -999, "minimum track phi"};
   Configurable<float> trackPhiMax{"trackPhiMax", 999, "maximum track phi"};
+  Configurable<double> trackingEfficiency{"trackingEfficiency", 1.0, "tracking efficiency applied to jet finding"};
   Configurable<std::string> trackSelections{"trackSelections", "globalTracks", "set track selections"};
-  Configurable<std::string> eventSelections{"eventSelections", "sel8", "choose event selection"};
   Configurable<std::string> particleSelections{"particleSelections", "PhysicalPrimary", "set particle selections"};
 
   // cluster level configurables
@@ -113,9 +116,12 @@ struct JetFinderHFTask {
   JetFinder jetFinder;
   std::vector<fastjet::PseudoJet> inputParticles;
 
+  std::vector<int> triggerMaskBits;
+
   void init(InitContext const&)
   {
     trackSelection = jetderiveddatautilities::initialiseTrackSelection(static_cast<std::string>(trackSelections));
+    triggerMaskBits = jetderiveddatautilities::initialiseTriggerMaskBits(triggerMasks);
     eventSelection = jetderiveddatautilities::initialiseEventSelection(static_cast<std::string>(eventSelections));
     particleSelection = static_cast<std::string>(particleSelections);
 
@@ -153,7 +159,7 @@ struct JetFinderHFTask {
   }
 
   aod::EMCALClusterDefinition clusterDefinition = aod::emcalcluster::getClusterDefinitionFromString(clusterDefinitionS.value);
-  Filter collisionFilter = (nabs(aod::jcollision::posZ) < vertexZCut && aod::jcollision::centrality >= centralityMin && aod::jcollision::centrality < centralityMax);
+  Filter collisionFilter = (nabs(aod::jcollision::posZ) < vertexZCut && aod::jcollision::centrality >= centralityMin && aod::jcollision::centrality < centralityMax && aod::jcollision::trackOccupancyInTimeRange < trackOccupancyInTimeRangeMax);
   Filter trackCuts = (aod::jtrack::pt >= trackPtMin && aod::jtrack::pt < trackPtMax && aod::jtrack::eta > trackEtaMin && aod::jtrack::eta < trackEtaMax && aod::jtrack::phi >= trackPhiMin && aod::jtrack::phi <= trackPhiMax);
   Filter trackSubCuts = (aod::jtracksub::pt >= trackPtMin && aod::jtracksub::pt < trackPtMax && aod::jtracksub::eta > trackEtaMin && aod::jtracksub::eta < trackEtaMax && aod::jtracksub::phi >= trackPhiMin && aod::jtracksub::phi <= trackPhiMax);
   Filter partCuts = (aod::jmcparticle::pt >= trackPtMin && aod::jmcparticle::pt < trackPtMax);
@@ -163,31 +169,32 @@ struct JetFinderHFTask {
   PresliceOptional<soa::Filtered<JetTracksSubTable>> perD0Candidate = aod::bkgd0::candidateId;
   PresliceOptional<soa::Filtered<JetTracksSubTable>> perLcCandidate = aod::bkglc::candidateId;
   PresliceOptional<soa::Filtered<JetTracksSubTable>> perBplusCandidate = aod::bkgbplus::candidateId;
+  PresliceOptional<soa::Filtered<JetTracksSubTable>> perDielectronCandidate = aod::bkgdielectron::candidateId;
 
   // function that generalically processes Data and reco level events
   template <bool isEvtWiseSub, typename T, typename U, typename V, typename M, typename N, typename O>
   void analyseCharged(T const& collision, U const& tracks, V const& candidate, M& jetsTableInput, N& constituentsTableInput, O& /*originalTracks*/, float minJetPt, float maxJetPt)
   {
-    if (!jetderiveddatautilities::selectCollision(collision, eventSelection)) {
+    if (!jetderiveddatautilities::selectCollision(collision, eventSelection) || !jetderiveddatautilities::selectTrigger(collision, triggerMaskBits)) {
       return;
     }
     inputParticles.clear();
 
-    if constexpr (jethfutilities::isHFCandidate<V>()) {
+    if constexpr (jetcandidateutilities::isCandidate<V>()) {
       if (!jetfindingutilities::analyseCandidate(inputParticles, candidate, candPtMin, candPtMax, candYMin, candYMax)) {
         return;
       }
     }
 
-    if constexpr (jethfutilities::isHFMcCandidate<V>()) {
+    if constexpr (jetcandidateutilities::isMcCandidate<V>()) {
       if (!jetfindingutilities::analyseCandidateMC(inputParticles, candidate, candPtMin, candPtMax, candYMin, candYMax, rejectBackgroundMCDCandidates)) {
         return;
       }
     }
     if constexpr (isEvtWiseSub) {
-      jetfindingutilities::analyseTracks<U, typename U::iterator>(inputParticles, tracks, trackSelection);
+      jetfindingutilities::analyseTracks<U, typename U::iterator>(inputParticles, tracks, trackSelection, trackingEfficiency);
     } else {
-      jetfindingutilities::analyseTracks(inputParticles, tracks, trackSelection, std::optional{candidate});
+      jetfindingutilities::analyseTracks(inputParticles, tracks, trackSelection, trackingEfficiency, std::optional{candidate});
     }
     jetfindingutilities::findJets(jetFinder, inputParticles, minJetPt, maxJetPt, jetRadius, jetAreaFractionMin, collision, jetsTableInput, constituentsTableInput, registry.get<THn>(HIST("hJet")), fillTHnSparse, true);
   }
@@ -196,7 +203,7 @@ struct JetFinderHFTask {
   template <typename T, typename U, typename V>
   void analyseMCP(T const& collision, U const& particles, V const& candidate, int jetTypeParticleLevel, float minJetPt, float maxJetPt)
   {
-    if (rejectIncorrectDecaysMCP && !jethfutilities::isMatchedHFCandidate(candidate)) { // is this even needed in the new derived format? it means any simulations run have to force the decay channel
+    if (rejectIncorrectDecaysMCP && !jetcandidateutilities::isMatchedCandidate(candidate)) { // is this even needed in the new derived format? it means any simulations run have to force the decay channel
       return;
     }
 
@@ -224,7 +231,7 @@ struct JetFinderHFTask {
   void processChargedEvtWiseSubJetsData(soa::Filtered<JetCollisions>::iterator const& collision, soa::Filtered<JetTracksSubTable> const& tracks, CandidateTableData const& candidates)
   {
     for (typename CandidateTableData::iterator const& candidate : candidates) {
-      analyseCharged<true>(collision, jethfutilities::slicedPerCandidate(tracks, candidate, perD0Candidate, perLcCandidate, perBplusCandidate), candidate, jetsEvtWiseSubTable, constituentsEvtWiseSubTable, tracks, jetEWSPtMin, jetEWSPtMax);
+      analyseCharged<true>(collision, jetcandidateutilities::slicedPerCandidate(tracks, candidate, perD0Candidate, perLcCandidate, perBplusCandidate, perDielectronCandidate), candidate, jetsEvtWiseSubTable, constituentsEvtWiseSubTable, tracks, jetEWSPtMin, jetEWSPtMax);
     }
   }
   PROCESS_SWITCH(JetFinderHFTask, processChargedEvtWiseSubJetsData, "charged hf jet finding on data with event-wise constituent subtraction", false);
@@ -240,7 +247,7 @@ struct JetFinderHFTask {
   void processChargedEvtWiseSubJetsMCD(soa::Filtered<JetCollisions>::iterator const& collision, soa::Filtered<JetTracksSubTable> const& tracks, CandidateTableMCD const& candidates)
   {
     for (typename CandidateTableMCD::iterator const& candidate : candidates) {
-      analyseCharged<true>(collision, jethfutilities::slicedPerCandidate(tracks, candidate, perD0Candidate, perLcCandidate, perBplusCandidate), candidate, jetsEvtWiseSubTable, constituentsEvtWiseSubTable, tracks, jetEWSPtMin, jetEWSPtMax);
+      analyseCharged<true>(collision, jetcandidateutilities::slicedPerCandidate(tracks, candidate, perD0Candidate, perLcCandidate, perBplusCandidate, perDielectronCandidate), candidate, jetsEvtWiseSubTable, constituentsEvtWiseSubTable, tracks, jetEWSPtMin, jetEWSPtMax);
     }
   }
   PROCESS_SWITCH(JetFinderHFTask, processChargedEvtWiseSubJetsMCD, "charged hf jet finding on MC detector level with event-wise constituent subtraction", false);
