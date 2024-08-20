@@ -196,12 +196,14 @@ struct ZDCqvectors{
         int i=0;
         for(const char* COORD1 : COORDS){
           for(const char* COORD2 : COORDS){
-            // Now we get: <XX> <XY> & <YX> <YY> : do only before (step0) and after (step5) of recentring.
+            // Now we get: <XX> <XY> & <YX> <YY> vs. Centrality : do only before (step0) and after (step5) of recentring.
             COORD_correlations[step % 5][i] = registry.add<TProfile>(Form("step%i/hQ%sA_Q%sC_vs_cent",step, COORD1, COORD2), Form("hQ%sA_Q%sC_vs_cent",COORD1, COORD2), kTProfile, {axisCent10});
             i++;
           }
         }
       }
+      // Add histograms for each step in the calibration process. 
+      // Sides is {A,C} and coords is {X,Y}
       for(const char* side : sides){
         for(const char* coord : COORDS){
           if(step==1){
@@ -234,68 +236,10 @@ struct ZDCqvectors{
       
     } // end of sum over steps
       
-    
-      
-//      //step1
-// DONE
-//      registry.add("step1/hQXA_mean_1perCent_Run","hQXA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-//      registry.add("step1/hQYA_mean_1perCent_Run","hQYA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-//      registry.add("step1/hQXC_mean_1perCent_Run","hQXC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-//      registry.add("step1/hQYC_mean_1perCent_Run","hQYC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-//      
-//      //step2
-//   DONE
-//      registry.add("step2/hQXA_mean_10perCent_v","hQXA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//      registry.add("step2/hQYA_mean_10perCent_v","hQYA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//      registry.add("step2/hQXC_mean_10perCent_v","hQXC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//      registry.add("step2/hQYC_mean_10perCent_v","hQYC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//   DONE
-//      registry.add("step2/hvx_mean_Run","hvx_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
-//      registry.add("step2/hvy_mean_Run","hvy_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
-//      registry.add("step2/hvz_mean_Run","hvz_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
-//      
-//      //step 3
-//   DONE
-//      registry.add("step3/hQXA_mean_10perCent_Run","hQXA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-//      registry.add("step3/hQYA_mean_10perCent_Run","hQYA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-//      registry.add("step3/hQXC_mean_10perCent_Run","hQXC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-//      registry.add("step3/hQYC_mean_10perCent_Run","hQYC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
-//      
-//      // cross terms
-//    NOT DONE
-//      registry.add("step3/hQXA_Run_10perCent_vy","hQXA_Run_10perCent_vy", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
-//      registry.add("step3/hQXA_Run_10perCent_vz","hQXA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-//      
-//      registry.add("step3/hQYA_Run_10perCent_vx","hQYA_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
-//      registry.add("step3/hQYA_Run_10perCent_vz","hQYA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-//      
-//      registry.add("step3/hQXC_Run_10perCent_vy","hQXC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
-//      registry.add("step3/hQXC_Run_10perCent_vz","hQXC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-//      
-//      registry.add("step3/hQYC_Run_10perCent_vx","hQYC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
-//      registry.add("step3/hQYC_Run_10perCent_vz","hQYC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
-//      
-//      
-//      
-//      //step 4
-//    NOT DONE
-//      registry.add("step4/hmeanN_1perCent_Run","hmeanN_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
-//   DONE
-//      registry.add("step4/hQXA_mean_Magnet_10perCent_v","hQXA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//      registry.add("step4/hQYA_mean_Magnet_10perCent_v","hQYA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//      registry.add("step4/hQXC_mean_Magnet_10perCent_v","hQXC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//      registry.add("step4/hQYC_mean_Magnet_10perCent_v","hQYC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
-//      
-//      //step 5
-//    DONE
-//      registry.add("step5/hQXA_mean_run_cent10_Mult","hQXA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-//      registry.add("step5/hQYA_mean_run_cent10_Mult","hQYA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-//      registry.add("step5/hQXC_mean_run_cent10_Mult","hQXC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-//      registry.add("step5/hQYC_mean_run_cent10_Mult","hQYC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
-//
-
     // recentered q-vectors
-//    registry.add("hStep","hStep", {HistType::kTH1D, {{5,0.,5.}}});
+   registry.add("hStep","hStep", {HistType::kTH1D, {{5,0.,5.}}});
+
+
     LOGF(info, "................................ ===========> SETUP CALIBRATION <=========== ................................");
     setupCalibration(); // find out what caibration histos are available and at what step to proceed.
     LOGF(info, "................................... ===========> SETUP DONE <=========== ....................................");
@@ -488,17 +432,17 @@ struct ZDCqvectors{
        retrieveAndCheck(hZN_mean, cfgQvecrecent->c_str(), "z-d-cqvectors/Energy/hZNC_mean_", ZN_towers, "_cent")){
       step0_open = true;
     } else {  
-      LOGF(info, "we return");
+      LOGF(info, "we return at step 0");
       return; }
 
     if (retrieveAndCheck(mean_1perCent_Run, cfgQvecrecent->c_str(), "z-d-cqvectors/step1/h",names_hQ,"_mean_1perCent_Run", true)) {
       step1_open = true;
-    } else { return; }
+    } else { LOGF(info, "we return at step 1"); return; }
 
     if (retrieveAndCheck(mean_10perCent_v,  cfgQvecrecent->c_str(), "z-d-cqvectors/step2/h",names_hQ, "_mean_10perCent_v") &&
         retrieveAndCheck(v_mean_Run,  cfgQvecrecent->c_str(), "z-d-cqvectors/step2/h", names_vcoord,"_mean_Run") ){
       step2_open = true;
-    } else { return;}
+    } else { LOGF(info, "we return at step 2"); return;}
     
 //    if (retrieveAndCheck(hFit_Run_Cent_vx,{names_hQ[1],names_hQ[3]},cfgOutFitStep3->c_str(),"hFit_","_Run_Cent_vx" )
 //        && retrieveAndCheck(hFit_Run_Cent_vy,{names_hQ[0],names_hQ[2]},cfgOutFitStep3->c_str(),"hFit_","_Run_Cent_vy" )
@@ -736,7 +680,7 @@ struct ZDCqvectors{
           return;
         }
         
-        // Only go here if step_0 is open! (Bool set to true or falsein setupCalibration())
+        // Only go here if step_0 is open! (Bool set to true or false in setupCalibration())
         if(counter<1) LOGF(info, "files for step 0 (energy Calibraton) are open!");
         
         if(!updateBinForRunNumber(runnumber, lastRunNumber, binRunNumber, numFoundint, hZN_mean[0])){
@@ -746,7 +690,7 @@ struct ZDCqvectors{
         
         // Now start gain equalisation!
         for(int tower=2; tower<10; tower++){
-          int common = (tower > 5) ? 1 : 0;
+          int common = (tower > 5) ? 1 : 0; // 0 and 1st element of meanEZN are the common channels
           meanEZN[tower] = hZN_mean[tower]->GetBinContent(int(binRunNumber),int(cent)+1);
           if(meanEZN[tower]>0) e[tower-2] = EZN[tower] * (0.25 * meanEZN[common]) / meanEZN[tower];
         }
@@ -967,3 +911,65 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 //    EZN[i+4] = collision.foundZDC().energySectorZNC()[i];
 //  }
 
+
+
+/// In the init was: 
+    
+      
+//      //step1
+// DONE
+//      registry.add("step1/hQXA_mean_1perCent_Run","hQXA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      registry.add("step1/hQYA_mean_1perCent_Run","hQYA_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      registry.add("step1/hQXC_mean_1perCent_Run","hQXC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      registry.add("step1/hQYC_mean_1perCent_Run","hQYC_mean_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//      
+//      //step2
+//   DONE
+//      registry.add("step2/hQXA_mean_10perCent_v","hQXA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step2/hQYA_mean_10perCent_v","hQYA_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step2/hQXC_mean_10perCent_v","hQXC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step2/hQYC_mean_10perCent_v","hQYC_mean_10perCent_v", {HistType::kTHnSparseD, {axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//   DONE
+//      registry.add("step2/hvx_mean_Run","hvx_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
+//      registry.add("step2/hvy_mean_Run","hvy_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
+//      registry.add("step2/hvz_mean_Run","hvz_mean_Run", {HistType::kTProfile, {{1,0.,1.}}});
+//      
+//      //step 3
+//   DONE
+//      registry.add("step3/hQXA_mean_10perCent_Run","hQXA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      registry.add("step3/hQYA_mean_10perCent_Run","hQYA_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      registry.add("step3/hQXC_mean_10perCent_Run","hQXC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      registry.add("step3/hQYC_mean_10perCent_Run","hQYC_mean_10perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent10}});
+//      
+//      // cross terms
+//    NOT DONE
+//      registry.add("step3/hQXA_Run_10perCent_vy","hQXA_Run_10perCent_vy", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
+//      registry.add("step3/hQXA_Run_10perCent_vz","hQXA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      registry.add("step3/hQYA_Run_10perCent_vx","hQYA_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
+//      registry.add("step3/hQYA_Run_10perCent_vz","hQYA_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      registry.add("step3/hQXC_Run_10perCent_vy","hQXC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVy_mean, axisQ}});
+//      registry.add("step3/hQXC_Run_10perCent_vz","hQXC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      registry.add("step3/hQYC_Run_10perCent_vx","hQYC_Run_10perCent_vx", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVx_mean, axisQ}});
+//      registry.add("step3/hQYC_Run_10perCent_vz","hQYC_Run_10perCent_vz", {HistType::kTHnSparseD, {axisRun,axisCent10,axisVz, axisQ}});
+//      
+//      
+//      
+//      //step 4
+//    DONE
+//      registry.add("step4/hmeanN_1perCent_Run","hmeanN_1perCent_Run", {HistType::kTProfile2D, {{1,0.,1.} ,axisCent}});
+//   DONE
+//      registry.add("step4/hQXA_mean_Magnet_10perCent_v","hQXA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step4/hQYA_mean_Magnet_10perCent_v","hQYA_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step4/hQXC_mean_Magnet_10perCent_v","hQXC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      registry.add("step4/hQYC_mean_Magnet_10perCent_v","hQYC_mean_Magnet_10perCent_v", {HistType::kTHnSparseD, {axisPolarity, axisCent10, axisVx_mean, axisVy_mean, axisVz, axisQ}});
+//      
+//      //step 5
+//    DONE
+//      registry.add("step5/hQXA_mean_run_cent10_Mult","hQXA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//      registry.add("step5/hQYA_mean_run_cent10_Mult","hQYA_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//      registry.add("step5/hQXC_mean_run_cent10_Mult","hQXC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//      registry.add("step5/hQYC_mean_run_cent10_Mult","hQYC_mean_run_cent10_Mult", {HistType::kTHnSparseD, {axisRun, axisCent10, axisMult_mean, axisQ}});
+//
