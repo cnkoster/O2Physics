@@ -11,7 +11,6 @@
 
 // In this task the energy calibration and recentring of Q-vectors constructed in the ZDCs will be done
 
-
 #include <stdlib.h>
 #include <cmath>
 #include <algorithm>
