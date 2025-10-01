@@ -157,7 +157,6 @@ struct ZdcQVectors {
 
   enum SelectionCriteria {
     evSel_FilteredEvent,
-    evSel_RCTFlagsZDC,
     evSel_Zvtx,
     evSel_sel8,
     evSel_occupancy,
@@ -165,8 +164,9 @@ struct ZdcQVectors {
     evSel_kIsGoodZvtxFT0vsPV,
     evSel_kNoCollInTimeRangeStandard,
     evSel_kIsVertexITSTPC,
-    evSel_CentCuts,
     evSel_kIsGoodITSLayersAll,
+    evSel_RCTFlagsZDC,
+    evSel_CentCuts,
     evSel_isSelectedZDC,
     nEventSelections
   };
@@ -337,71 +337,72 @@ struct ZdcQVectors {
   }
 
   template <typename TCollision>
-  bool eventSelected(TCollision collision, const float& centrality)
+  uint16_t eventSelected(TCollision collision)
   {
-    if (std::fabs(collision.posZ()) > cfgVtxZ)
-      return 0;
-    registry.fill(HIST("hEventCount"), evSel_Zvtx);
+    uint16_t selectionBits = 0;
+    bool selected;
 
-    if (!collision.sel8())
-      return 0;
-    registry.fill(HIST("hEventCount"), evSel_sel8);
+    // Define selection criteria 
+    // If event is selected (passed the cut), set the corresponding bit in the selectionBits variable
+    // bit 0 is for filterd events, so it will stay 0
+    // uint16_t is 16 bits, so we have room for 15 selection criteria here 
 
-    // Occupancy
-    if (cfgEvSelsDoOccupancySel) {
-      auto occupancy = collision.trackOccupancyInTimeRange();
-      if (occupancy > cfgEvSelsMaxOccupancy) {
-        return 0;
-      }
+    selected = std::fabs(collision.posZ()) < cfgVtxZ;
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_Zvtx);
+      registry.fill(HIST("hEventCount"), evSel_Zvtx);
+    }
+
+    selected = collision.sel8();
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_sel8);
+      registry.fill(HIST("hEventCount"), evSel_sel8);
+    }
+
+    auto occupancy = collision.trackOccupancyInTimeRange();
+    selected = occupancy <= cfgEvSelsMaxOccupancy;
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_occupancy);
       registry.fill(HIST("hEventCount"), evSel_occupancy);
     }
 
-    if (cfgEvSelsNoSameBunchPileupCut) {
-      if (!collision.selection_bit(o2::aod::evsel::kNoSameBunchPileup)) {
-        // rejects collisions which are associated with the same "found-by-T0" bunch crossing
-        // https://indico.cern.ch/event/1396220/#1-event-selection-with-its-rof
-        return 0;
-      }
+    selected = collision.selection_bit(o2::aod::evsel::kNoSameBunchPileup);
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_kNoSameBunchPileup);
       registry.fill(HIST("hEventCount"), evSel_kNoSameBunchPileup);
     }
-    if (cfgEvSelsIsGoodZvtxFT0vsPV) {
-      if (!collision.selection_bit(o2::aod::evsel::kIsGoodZvtxFT0vsPV)) {
-        // removes collisions with large differences between z of PV by tracks and z of PV from FT0 A-C time difference
-        // use this cut at low multiplicities with caution
-        return 0;
-      }
+
+    selected = collision.selection_bit(o2::aod::evsel::kIsGoodZvtxFT0vsPV);
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_kIsGoodZvtxFT0vsPV);
       registry.fill(HIST("hEventCount"), evSel_kIsGoodZvtxFT0vsPV);
     }
-    if (cfgEvSelsNoCollInTimeRangeStandard) {
-      if (!collision.selection_bit(o2::aod::evsel::kNoCollInTimeRangeStandard)) {
-        //  Rejection of the collisions which have other events nearby
-        return 0;
-      }
+
+    selected = collision.selection_bit(o2::aod::evsel::kNoCollInTimeRangeStandard);
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_kNoCollInTimeRangeStandard);
       registry.fill(HIST("hEventCount"), evSel_kNoCollInTimeRangeStandard);
     }
 
-    if (cfgEvSelsIsVertexITSTPC) {
-      if (!collision.selection_bit(o2::aod::evsel::kIsVertexITSTPC)) {
-        // selects collisions with at least one ITS-TPC track, and thus rejects vertices built from ITS-only tracks
-        return 0;
-      }
+    selected = collision.selection_bit(o2::aod::evsel::kIsVertexITSTPC);
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_kIsVertexITSTPC);
       registry.fill(HIST("hEventCount"), evSel_kIsVertexITSTPC);
     }
 
-    if (centrality > cfgEvSelsCentMax || centrality < cfgEvSelsCentMin)
-      return 0;
-    registry.fill(HIST("hEventCount"), evSel_CentCuts);
-
-    if (cfgEvSelsIsGoodITSLayersAll) {
-      if (!collision.selection_bit(o2::aod::evsel::kIsGoodITSLayersAll)) {
-        // New event selection bits to cut time intervals with dead ITS staves
-        // https://indico.cern.ch/event/1493023/ (09-01-2025)
-        return 0;
-      }
+    selected = collision.selection_bit(o2::aod::evsel::kIsGoodITSLayersAll);
+    if (selected) {
+      selectionBits |= (uint16_t)(0x1u << evSel_kIsGoodITSLayersAll);
       registry.fill(HIST("hEventCount"), evSel_kIsGoodITSLayersAll);
     }
 
-    return 1;
+    selected = rctChecker(collision); 
+    if (selected){ 
+      selectionBits |= (uint16_t)(0x1u << evSel_RCTFlagsZDC);
+      registry.fill(HIST("hEventCount"), evSel_RCTFlagsZDC);
+    }
+
+    return selectionBits;
   }
 
   template <FillType ft>
@@ -602,28 +603,22 @@ struct ZdcQVectors {
 
     registry.fill(HIST("hEventCount"), evSel_FilteredEvent);
 
-    if (rctFlags.cfgEvtUseRCTFlagChecker && !rctChecker(collision)) {
-      // event not selected
-      isSelected = false;
-      spTableZDC(runnumber, cent, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, 0, 0);
-      counter++;
-      lastRunNumber = runnumber;
-      return;
-    }
-    registry.fill(HIST("hEventCount"), evSel_RCTFlagsZDC);
 
-    if (!eventSelected(collision, cent)) {
+    uint16_t eventSelectionFlags = eventSelected(collision);
+
+    if (centrality < cfgEvSelsCentMin || centrality > cfgEvSelsCentMax) {
       // event not selected
       isSelected = false;
-      spTableZDC(runnumber, cent, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, 0, 0);
+      spTableZDC(runnumber, cent, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, eventSelectionFlags);
       counter++;
       lastRunNumber = runnumber;
       return;
     }
+    registry.fill(HIST("hEventCount"), evSel_CentCuts);
 
     if (!foundBC.has_zdc()) {
       isSelected = false;
-      spTableZDC(runnumber, cent, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, 0, 0);
+      spTableZDC(runnumber, cent, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, eventSelectionFlags);
       counter++;
       lastRunNumber = runnumber;
       return;
@@ -705,7 +700,7 @@ struct ZdcQVectors {
     if (!isZNAhit || !isZNChit) {
       counter++;
       isSelected = false;
-      spTableZDC(runnumber, centrality, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, 0, 0);
+      spTableZDC(runnumber, centrality, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, eventSelectionFlags);
       lastRunNumber = runnumber;
       return;
     }
@@ -716,7 +711,7 @@ struct ZdcQVectors {
     if (!cal.calibfilesLoaded[0]) {
       counter++;
       isSelected = false;
-      spTableZDC(runnumber, centrality, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, 0, 0);
+      spTableZDC(runnumber, centrality, v[0], v[1], v[2], 0, 0, 0, 0, isSelected, eventSelectionFlags);
       lastRunNumber = runnumber;
       return;
     }
@@ -857,7 +852,7 @@ struct ZdcQVectors {
       if (isSelected && cfgFillCommonRegistry)
         fillCommonRegistry<kBefore>(q[0], q[1], q[2], q[3], v, centrality);
 
-      spTableZDC(runnumber, centrality, v[0], v[1], v[2], q[0], q[1], q[2], q[3], isSelected, 0, 0);
+      spTableZDC(runnumber, centrality, v[0], v[1], v[2], q[0], q[1], q[2], q[3], isSelected, eventSelectionFlags);
       counter++;
       lastRunNumber = runnumber;
       return;
@@ -991,7 +986,7 @@ struct ZdcQVectors {
       double qXcShift = std::hypot(qRec[2], qRec[3]) * std::cos(psiZDCCshift);
       double qYcShift = std::hypot(qRec[2], qRec[3]) * std::sin(psiZDCCshift);
 
-      spTableZDC(runnumber, centrality, v[0], v[1], v[2], qXaShift, qYaShift, qXcShift, qYcShift, isSelected, cal.atIteration, cal.atStep);
+      spTableZDC(runnumber, centrality, v[0], v[1], v[2], qXaShift, qYaShift, qXcShift, qYcShift, isSelected, eventSelectionFlags);
       qRec.clear();
 
       counter++;
