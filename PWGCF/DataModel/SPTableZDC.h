@@ -25,18 +25,17 @@ namespace o2::aod
 {
 namespace sptablezdc
 {
-DECLARE_SOA_COLUMN(Runnumber, runnumber, int);
-DECLARE_SOA_COLUMN(Cent, cent, float);
-DECLARE_SOA_COLUMN(Vx, vx, float);
-DECLARE_SOA_COLUMN(Vy, vy, float);
-DECLARE_SOA_COLUMN(Vz, vz, float);
-DECLARE_SOA_COLUMN(QXA, qxA, float);
-DECLARE_SOA_COLUMN(QYA, qyA, float);
-DECLARE_SOA_COLUMN(QXC, qxC, float);
-DECLARE_SOA_COLUMN(QYC, qyC, float);
-DECLARE_SOA_COLUMN(IsSelected, isSelected, bool);
-DECLARE_SOA_COLUMN(Iteration, iteration, int);
-DECLARE_SOA_COLUMN(Step, step, int);
+DECLARE_SOA_COLUMN(Runnumber, runnumber, int);                  // Run number
+DECLARE_SOA_COLUMN(Cent, cent, float);                          // Centrality
+DECLARE_SOA_COLUMN(Vx, vx, float);                              // Vx, Vy, Vz are the vertex coordinates   of the collision 
+DECLARE_SOA_COLUMN(Vy, vy, float);                              // Vx, Vy, Vz are the vertex coordinates   of the collision 
+DECLARE_SOA_COLUMN(Vz, vz, float);                              // Vx, Vy, Vz are the vertex coordinates   of the collision 
+DECLARE_SOA_COLUMN(QXA, qxA, float);                            // Q-vector x-component for ZDC A-side
+DECLARE_SOA_COLUMN(QYA, qyA, float);                            // Q-vector y-component for ZDC A-side  
+DECLARE_SOA_COLUMN(QXC, qxC, float);                            // Q-vector x-component for ZDC C-side
+DECLARE_SOA_COLUMN(QYC, qyC, float);                            // Q-vector y-component for ZDC C-side
+DECLARE_SOA_COLUMN(IsSelected, isSelected, bool);               // Is event selected for good ZDC quality 
+DECLARE_SOA_COLUMN(EventSelections, eventSelections, uint16_t); // Unsigned int to use as bitmask if event passed event selection criteria 
 
 } // namespace sptablezdc
 
@@ -51,7 +50,6 @@ DECLARE_SOA_TABLE(SPTableZDC, "AOD", "SPZDC",
                   sptablezdc::QXC,
                   sptablezdc::QYC,
                   sptablezdc::IsSelected,
-                  sptablezdc::Iteration,
-                  sptablezdc::Step);
+                  sptablezdc::EventSelections);
 } // namespace o2::aod
 #endif // PWGCF_DATAMODEL_SPTABLEZDC_H_
